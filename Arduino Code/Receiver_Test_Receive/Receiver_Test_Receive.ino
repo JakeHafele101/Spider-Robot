@@ -2,7 +2,7 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
-RF24 radio(7, 8); //CE, CSN
+RF24 radio(9, 10); //CE, CSN
 
 const byte address[6] = "00001"; //Acts as key between receivers
 
@@ -20,6 +20,8 @@ void loop() {
   if(radio.available()){
     int buttonState = 0;
     radio.read(&buttonState, sizeof(buttonState));
-    Serial.println(buttonState);
+    if(buttonState != 0){
+      Serial.println(buttonState);
+    }
   }
 }

@@ -14,16 +14,28 @@
 #define NORMAL_OFFSET 45
 
 #define BUTTON_QUEUE_LENGTH 20
-#define SERVO_DELAY 500 //Delay in milliseconds
+#define SERVO_DELAY 100 //Delay in milliseconds
+#define WAVE_DELAY 250
+#define PUSHUP_DELAY 250
+#define BOUNCE_DELAY 250
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 const int servo[NUM_LEG][SERVO_PER_LEG] = {{0, 1}, {2, 3}, {4, 5}, {6, 7}};
-const int servoOffset[NUM_LEG][SERVO_PER_LEG] = {{0, 0}, {0, 0}, {0, 0}, {0, 0}};
 
-RF24 radio(7, 8); //CE, CSN
+const int J1Parallel[NUM_LEG] = {135, 41, 40, 125};
+const int J1Forward[NUM_LEG] = {40, 10, 140, 170};
+const int J1Backward[NUM_LEG] = {180, 130, 0, 30};
+
+const int J2Right[NUM_LEG] = {44, 140, 135, 50};
+const int J2Parallel[NUM_LEG] = {130, 50, 50, 135};
+const int J2Inside[NUM_LEG] = {10, 180, 180, 20};
+
+const int forwardOrder[NUM_LEG] = {1, 3, 0, 2};
+
+RF24 radio(9, 10); //CE, CSN
 const byte address[6] = "00001"; //Acts as key between receivers
 
-int buttonQueue[BUTTON_QUEUE_LENGTH];
+int currentButton;
 
 void setup() {
 
@@ -35,23 +47,16 @@ void setup() {
   pwm.begin();
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
 
-  for(int i = 0; i < BUTTON_QUEUE_LENGTH; i++){ //Sets whole button queue array to 0 so no null errors
-    buttonQueue[i] = 0;
-  }
-
   Serial.begin(9600);
 }
 
 void loop() {
 
   if(radio.available()){
-    int nextButton;
-    radio.read(&nextButton, sizeof(nextButton));
-    Serial.println(nextButton);
-    addButtonQueue(nextButton);
+    radio.read(&currentButton, sizeof(currentButton));
+    Serial.println(currentButton);
   }
-  setNormal();
-  switch(buttonQueue[0]){
+  switch(currentButton){
     case 1:
       moveForward();
       break;
@@ -59,101 +64,211 @@ void loop() {
       moveBackward();
       break;
     case 3:
-      moveRight();
+      turnRight();
       break;
     case 4:
-      moveLeft();
+      turnLeft();
       break;
     case 5:
       waveArm();
       break;
     case 6:
-      action2();
+      pushUp();
       break;
     case 7:
-      action3();
+      bounce();
       break;
     case 8:
-      action4();
+      setNormal();
       break;
   }
-  moveForward();
-  setNormal();
-  removeButtonQueue();
-}
-
-void addButtonQueue(int nextButton){ //Adds button to end of queue array 
-  for(int i = 0; i < BUTTON_QUEUE_LENGTH; i++){
-    if(buttonQueue[i] == 0){ //Checks if there is a queue slot at index i of buttonQueue array
-      buttonQueue[i] = nextButton;
-      return; //Returns so only one number added to array
-    }
-  }
-}
-
-void removeButtonQueue(){ //Removes the first button number from queue, ideally after the action is done
-  for(int i = 0; i < BUTTON_QUEUE_LENGTH - 1; i++){
-    buttonQueue[i] = buttonQueue[i + 1];
-  }
-  buttonQueue[BUTTON_QUEUE_LENGTH - 1] = 0;
 }
 
 void setRightAngle(){ //Sets every servo to 90 degrees so servos can be screwed in. Not used for final program
   for(int i = 0; i < NUM_LEG; i++){
     for(int j = 0; j < SERVO_PER_LEG; j++){
-      pwm.setPWM(servo[i][j], 0, pulseWidth(90));
+      setAngle(servo[i][j], 90);
     }
   }
 }
 
 void setNormal(){
   for(int i = 0; i < NUM_LEG; i++){ //Sets joint 1 parts to 90 degrees
-    pwm.setPWM(servo[i][0], 0, pulseWidth(90)); 
+    setAngle(servo[i][0], 90);
   }
-  pwm.setPWM(servo[0][1], 0, pulseWidth(90 - NORMAL_OFFSET)); //Sets joint 2 parts to be perpendicular to joint 1
-  pwm.setPWM(servo[1][1], 0, pulseWidth(90 + NORMAL_OFFSET));
-  pwm.setPWM(servo[2][1], 0, pulseWidth(90 + NORMAL_OFFSET));
-  pwm.setPWM(servo[3][1], 0, pulseWidth(90 - NORMAL_OFFSET));
+  setAngle(servo[0][1], 90 - NORMAL_OFFSET);
+  setAngle(servo[1][1], 90 + NORMAL_OFFSET);
+  setAngle(servo[2][1], 90 + NORMAL_OFFSET);
+  setAngle(servo[3][1], 90 - NORMAL_OFFSET);
   delay(SERVO_DELAY);
 }
 
 void moveForward(){ //Each leg takes one step forward
-  pwm.setPWM(servo[1][0], 0, pulseWidth(20));
-  pwm.setPWM(servo[3][0], 0, pulseWidth(160));
+  setNormal();
+  
+  setJ2Inside(3);
+  setJ1Parallel(3);
   delay(SERVO_DELAY);
-  pwm.setPWM(servo[0][0], 0, pulseWidth(160));
-  pwm.setPWM(servo[1][0], 0, pulseWidth(135));
-  pwm.setPWM(servo[2][0], 0, pulseWidth(20));
-  pwm.setPWM(servo[3][0], 0, pulseWidth(45));
+  setJ2Right(3);
+
+  setJ2Inside(2);
+  setJ190(2);
+  delay(SERVO_DELAY);
+  setJ2Right(2);
+  
+  setJ2Inside(1);
+  setJ2Inside(2);
+  setJ1Parallel(1);
+  setJ190(2);
+
+  setJ190(3);
+  setJ1Parallel(0);
+  delay(SERVO_DELAY);
+
+  setJ2Right(1);
+  setJ2Right(2);
+  delay(SERVO_DELAY);
+
+  setJ2Inside(0);
+  setJ2Inside(3);
+  setJ1Parallel(3);
+  setJ190(0);
+
+  setJ190(1);
+  setJ1Parallel(2);
+  delay(SERVO_DELAY);
+
+  setJ2Right(0);
+  setJ2Right(3);
   delay(SERVO_DELAY);
 }
 
 void moveBackward(){ //Each leg takes one step backward
+  setNormal();
   
+  setJ2Inside(0);
+  setJ1Parallel(0);
+  delay(SERVO_DELAY);
+  setJ2Right(0);
+
+  setJ2Inside(1);
+  setJ190(1);
+  delay(SERVO_DELAY);
+  setJ2Right(1);
+  
+  setJ2Inside(2);
+  setJ2Inside(1);
+  setJ1Parallel(2);
+  setJ190(1);
+
+  setJ190(0);
+  setJ1Parallel(3);
+  delay(SERVO_DELAY);
+
+  setJ2Right(1);
+  setJ2Right(2);
+  delay(SERVO_DELAY);
+
+  setJ2Inside(0);
+  setJ2Inside(3);
+  setJ1Parallel(0);
+  setJ190(3);
+
+  setJ190(2);
+  setJ1Parallel(1);
+  delay(SERVO_DELAY);
+
+  setJ2Right(0);
+  setJ2Right(3);
+  delay(SERVO_DELAY);
 }
 
-void moveRight(){ //Each leg takes one step to the right
+void turnRight(){ //Each leg takes one step to the right
+  setNormal();
   
+  setJ2Inside(0);
+  setJ2Inside(3);
+  delay(SERVO_DELAY);
+
+  setJ1Backward(1);
+  setJ1Forward(2);
+  delay(SERVO_DELAY);
+
+  setJ2Right(0);
+  setJ2Right(3);
+  setJ2Inside(1);
+  setJ2Inside(2);
+  setJ190(1);
+  setJ190(2);
+  delay(SERVO_DELAY);
+
+  setJ1Forward(3);
+  setJ1Backward(0);
+  delay(SERVO_DELAY);
+
+  setJ290(1);
+  setJ290(2);
 }
 
-void moveLeft(){ //Each leg takes one step to the left
+void turnLeft(){ //Each leg takes one step to the left
+  setNormal();
   
+  setJ2Inside(0);
+  setJ2Inside(3);
+  delay(SERVO_DELAY);
+
+  setJ1Forward(1);
+  setJ1Backward(2);
+  delay(SERVO_DELAY);
+
+  setJ2Right(0);
+  setJ2Right(3);
+  setJ2Inside(1);
+  setJ2Inside(2);
+  setJ190(1);
+  setJ190(2);
+  delay(SERVO_DELAY);
+
+  setJ1Backward(3);
+  setJ1Forward(0);
+  delay(SERVO_DELAY);
+
+  setJ290(1);
+  setJ290(2);
 }
 
 void waveArm(){ //Waves front right arm
-  
+  setJ2Right(1);
+  setJ2Right(2);
+  setJ2Right(3);
+  setJ2Parallel(0);
+  setJ1Parallel(0);
+  delay(WAVE_DELAY);
+  setAngle(1, 170);
+  setJ1Forward(0);
+  delay(WAVE_DELAY);
 }
 
-void action2(){
-  
+void pushUp(){
+  setJ1Parallel(1);
+  setJ1Parallel(3);
+  setJ1Forward(0);
+  setJ1Forward(2);
+  for(int i = 0; i < NUM_LEG; i++){
+    setJ2Right(i);
+  }
+  delay(PUSHUP_DELAY);
+  setJ290(0);
+  setJ290(2);
+  delay(PUSHUP_DELAY);
 }
 
-void action3(){
-  
-}
-
-void action4(){
-  
+void bounce(){
+  setNormal();
+  for(int i = 0; i < NUM_LEG; i++){
+    setJ290(i);
+  }
+  delay(BOUNCE_DELAY);
 }
 
 int pulseWidth(int angle){ //Used to make servo driver angles set easier
@@ -161,4 +276,40 @@ int pulseWidth(int angle){ //Used to make servo driver angles set easier
   pulseWide = map(angle, 0, 180, SERVO_MIN, SERVO_MAX);
   analogValue = int(float(pulseWide) / 1000000 * SERVO_FREQ * 4096);
   return analogValue;
+}
+
+void setAngle(int servo, int angle){
+  pwm.setPWM(servo, 0, pulseWidth(angle));
+}
+
+void setJ190(int legNum){
+  setAngle(servo[legNum][0], 90);
+}
+
+void setJ1Parallel(int legNum){
+  setAngle(servo[legNum][0], J1Parallel[legNum]);
+}
+
+void setJ1Forward(int legNum){
+  setAngle(servo[legNum][0], J1Forward[legNum]);
+}
+
+void setJ1Backward(int legNum){
+  setAngle(servo[legNum][0], J1Backward[legNum]);
+}
+
+void setJ290(int legNum){
+  setAngle(servo[legNum][1], 90);
+}
+
+void setJ2Right(int legNum){
+  setAngle(servo[legNum][1], J2Right[legNum]);
+}
+
+void setJ2Parallel(int legNum){
+  setAngle(servo[legNum][1], J2Parallel[legNum]);
+}
+
+void setJ2Inside(int legNum){
+  setAngle(servo[legNum][1], J2Inside[legNum]);
 }
